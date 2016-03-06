@@ -69,9 +69,7 @@ img {
 
 <div id="background" class="section level3">
 <h3>Background</h3>
-<p>Use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants</p>
-<p>They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.</p>
-<p><a href="http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises" class="uri">http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises</a> Paper can be found <a href="http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201">here</a></p>
+<p>Personal activity data has been collected from six participants in a qualitative activity recognition study. Using data from accelerometers on the belt, forearm, arm, and dumbells, participants were asked to perform barbell lifts correctly and incorrectly in five different ways. The resulting data has been analysed to determine if Machine Learning algorithms can accurately predict which variation of an exercise a person is performing. The study recorded the following five exercise variations.</p>
 <table>
 <thead>
 <tr class="header">
@@ -102,18 +100,17 @@ img {
 </tr>
 </tbody>
 </table>
+<p>Full details from the study can be found from <a href="http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises" class="uri">http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises</a>. The full paper can be found <a href="http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201">here</a>. The study training data has been sourced from <a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv" class="uri">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv</a>. The testing data can also be found <a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv">here</a>.</p>
 </div>
 <div id="objective" class="section level3">
 <h3>Objective</h3>
-<p>Apply your machine learning algorithm to the 20 test cases available in the test data</p>
+<p>Choice a Machine Learning algorithm to most accurately predict the five different exercise variation types. The final model will be used to predit 20 test cases available in the test dataset.</p>
 </div>
-<div id="exploritory-analysis" class="section level3">
-<h3>Exploritory Analysis</h3>
-<p><a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv" class="uri">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv</a></p>
-<p><a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv" class="uri">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv</a></p>
+<div id="exploritory-data-analysis" class="section level3">
+<h3>Exploritory Data Analysis</h3>
+<p>Firstly load in the training dataset.</p>
 <pre class="r"><code>pmlData &lt;- read.csv(&quot;pml-training.csv&quot;, stringsAsFactors = FALSE, na.strings = c(&quot;NA&quot;,&quot;#DIV/0!&quot;,&quot;&quot;))</code></pre>
-<pre><code>## [1] &quot;Dimensions&quot;</code></pre>
-<pre><code>## [1] 19622   160</code></pre>
+<p>Reviewing the training dataset we find it contains 19622 rows and 160 columns. To produce as simple model as possible we need to remove any variables that have little predictive power and will not adversly affect the final prediction. Within the dataset there are many columns containing very little data with the majority of values being NA. The NA columns only contain values when the “new_window” variable is set to “yes”. Let’s review the proportions of this value to determine if it can be removed from the traning data.</p>
 <pre><code>## [1] &quot;new_window Factor count&quot;</code></pre>
 <pre><code>## 
 ##    no   yes 
@@ -122,9 +119,11 @@ img {
 <pre><code>## 
 ##         no        yes 
 ## 0.97930894 0.02069106</code></pre>
-</div>
-<div id="preparing-the-data" class="section level3">
-<h3>Preparing the data</h3>
+<p>As the “yes” value only represents 0.2069106% of the overall dataset, we can assume it will have little impact on the results if removed. After removing these rows, a nearZeroVar analysis shows we can further reduce the number of columns by removing the Near Zero Value columns, reducing the overall columns down to 59.</p>
+<p>Further, we can also remove any time values, as the analysis we are conducting has no time dependancies. The “X” index is also not required and the “user_name” should be removed, so as not to overfit the model on specific users. A model produced without usernames will be able to be applied to wider test data sets. This beings our overall columns to 54 which includes our predictor “classe” which we can convert to a factor.</p>
+<div id="preparing-the-data" class="section level4">
+<h4>Preparing the data</h4>
+<p>Clean dataset as per the analysis conducted above.</p>
 <pre class="r"><code>pmlNo &lt;- pmlData[pmlData$new_window == &quot;no&quot;,]
 pmlClean &lt;- nearZeroVar(pmlNo, saveMetrics = TRUE)
 rnames &lt;- row.names(pmlClean[pmlClean$nzv == FALSE,])
@@ -132,9 +131,11 @@ pmlData &lt;- pmlNo[,rnames]
 rm(pmlNo)
 pmlData &lt;- pmlData[, -(1:5)]
 pmlData$classe &lt;- factor(pmlData$classe)</code></pre>
+</div>
 <div id="assumptions-and-limitations" class="section level4">
 <h4>Assumptions and limitations</h4>
-<p>Could not preform PCA due to R error</p>
+<p>Further revision of the remaining columns shows some strong correlation between some predictors. These should be removed or transformed to a simpler composite variable using Principle Component Analysis. However, due to the number of variable combinations listed below this was too time consuming to process by hand. Also I received errors from R when trying to PreProcess the new dataset using the PCA method. Therefore I left all 54 variables in my training dataset.</p>
+<p><strong>Highly correlated variables</strong></p>
 <pre class="r"><code>M &lt;- abs(cor(pmlData[,-54]))
 diag(M) &lt;- 0
 which(M &gt; 0.9, arr.ind=T)</code></pre>
@@ -164,7 +165,8 @@ which(M &gt; 0.9, arr.ind=T)</code></pre>
 </div>
 <div id="cross-validation" class="section level4">
 <h4>Cross Validation</h4>
-<pre class="r"><code>inTrain &lt;- createDataPartition(y=pmlData$classe, p=0.1, list=FALSE)
+<p>Because of the large training dataset, cross validation, although not necessary, would aid in addressing potential overfitting of our chosen model. I now break the training dataset into a training and validation set.</p>
+<pre class="r"><code>inTrain &lt;- createDataPartition(y=pmlData$classe, p=0.8, list=FALSE)
 training &lt;- pmlData[inTrain,]
 validation &lt;- pmlData[-inTrain,]
 rm(inTrain)
@@ -173,26 +175,28 @@ rm(pmlData)</code></pre>
 </div>
 <div id="model-build" class="section level3">
 <h3>Model Build</h3>
-<p>To obtain the best</p>
-<pre class="r"><code># Predicting with Trees
-set.seed(32343)
+<p>To obtain the best model for predicting the weight lifting exercise dataset, I will compare the accuracy of three different model types, Trees, Boosting and Random Forests. The model with the best results will be used for the final test prediction. A summary of the each model accuracy over the training and validation datasets is presented below the model build.</p>
+<div id="prediction-using-trees" class="section level4">
+<h4>Prediction using Trees</h4>
+<pre class="r"><code>set.seed(32343)
 modFit &lt;- train(classe ~ .,method=&quot;rpart&quot;,data=training)
 
 # Make Model Summary Table
 pred &lt;- predict(modFit,newdata=training)
 confRpart &lt;- confusionMatrix(pred, training$classe)$overall
 results &lt;- data.frame()
-results &lt;- cbind( &quot;rpart train&quot;, rbind(results, confRpart))
+results &lt;- cbind( &quot;rpart Train&quot;, rbind(results, confRpart))
 names(results) &lt;- c(&quot;ModelType&quot;, names(confRpart))
 results[,1] &lt;- as.character(results[,1])
 
 # Adding to Summary results
 pred &lt;- predict(modFit,newdata=validation)
 confRpart &lt;- confusionMatrix(pred, validation$classe)$overall
-results &lt;- rbind( results, c(&quot;rpart val&quot;, confRpart))
-
-# Predicting with Boosting
-set.seed(12345)
+results &lt;- rbind( results, c(&quot;rpart Val&quot;, confRpart))</code></pre>
+</div>
+<div id="prediction-using-boosting" class="section level4">
+<h4>Prediction using Boosting</h4>
+<pre class="r"><code>set.seed(12345)
 modelFit &lt;- train(classe ~ ., method=&quot;gbm&quot;,data=training,verbose=FALSE)
 pred &lt;- predict(modelFit, training)
 
@@ -202,10 +206,11 @@ results &lt;- rbind( results, c(&quot;boost Train&quot;, confboost))
 
 pred &lt;- predict(modelFit, validation)
 confboost &lt;- confusionMatrix(pred, validation$classe)$overall
-results &lt;- rbind( results, c(&quot;boost Val&quot;, confboost))
-
-# Predicting with Random Forest
-set.seed(12345)
+results &lt;- rbind( results, c(&quot;boost Val&quot;, confboost))</code></pre>
+</div>
+<div id="prediction-using-random-forests" class="section level4">
+<h4>Prediction using Random Forests</h4>
+<pre class="r"><code>set.seed(12345)
 modelFit &lt;- train(classe ~.,data=training, method=&quot;rf&quot;,trControl = trainControl(method=&quot;cv&quot;))
 pred &lt;- predict(modelFit, training)
 
@@ -215,9 +220,9 @@ results &lt;- rbind( results, c(&quot;rf Train&quot;, confrf))
 
 pred &lt;- predict(modelFit, validation)
 confrf &lt;- confusionMatrix(pred, validation$classe)$overall
-results &lt;- rbind( results, c(&quot;rf Val&quot;, confrf))
-
-kable(results[1:6])</code></pre>
+results &lt;- rbind( results, c(&quot;rf Val&quot;, confrf))</code></pre>
+<p><strong>Summary Accuracy table</strong></p>
+<pre class="r"><code>kable(results[1:6])</code></pre>
 <table>
 <thead>
 <tr class="header">
@@ -231,98 +236,97 @@ kable(results[1:6])</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">rpart train</td>
-<td align="left">0.57952182952183</td>
-<td align="left">0.464348297701591</td>
-<td align="left">0.557097337326325</td>
-<td align="left">0.601703534727156</td>
-<td align="left">0.284823284823285</td>
+<td align="left">rpart Train</td>
+<td align="left">0.496130081300813</td>
+<td align="left">0.34124782872227</td>
+<td align="left">0.488195820743839</td>
+<td align="left">0.504065806666062</td>
+<td align="left">0.284682926829268</td>
 </tr>
 <tr class="even">
-<td align="left">rpart val</td>
-<td align="left">0.56881795049734</td>
-<td align="left">0.450171286225589</td>
-<td align="left">0.561396510871332</td>
-<td align="left">0.576216235258197</td>
-<td align="left">0.28469812630118</td>
+<td align="left">rpart Val</td>
+<td align="left">0.492840406144233</td>
+<td align="left">0.336128732822325</td>
+<td align="left">0.476910050561066</td>
+<td align="left">0.508781664946997</td>
+<td align="left">0.284821661025775</td>
 </tr>
 <tr class="odd">
 <td align="left">boost Train</td>
-<td align="left">0.998440748440748</td>
-<td align="left">0.998027558142952</td>
-<td align="left">0.995450030392756</td>
-<td align="left">0.999678329340818</td>
-<td align="left">0.284823284823285</td>
+<td align="left">0.991934959349594</td>
+<td align="left">0.989796963643812</td>
+<td align="left">0.990391576857921</td>
+<td align="left">0.993287572445146</td>
+<td align="left">0.284682926829268</td>
 </tr>
 <tr class="even">
 <td align="left">boost Val</td>
-<td align="left">0.945697432338654</td>
-<td align="left">0.931317480814261</td>
-<td align="left">0.942215203251696</td>
-<td align="left">0.949028786716858</td>
-<td align="left">0.28469812630118</td>
+<td align="left">0.984639416818537</td>
+<td align="left">0.980568426202781</td>
+<td align="left">0.980230185431807</td>
+<td align="left">0.988286790308566</td>
+<td align="left">0.284821661025775</td>
 </tr>
 <tr class="odd">
 <td align="left">rf Train</td>
 <td align="left">1</td>
 <td align="left">1</td>
-<td align="left">0.998084539826236</td>
+<td align="left">0.999760101661243</td>
 <td align="left">1</td>
-<td align="left">0.284823284823285</td>
+<td align="left">0.284682926829268</td>
 </tr>
 <tr class="even">
 <td align="left">rf Val</td>
-<td align="left">0.963046495489244</td>
-<td align="left">0.953225943262808</td>
-<td align="left">0.960126845904615</td>
-<td align="left">0.965809046923694</td>
-<td align="left">0.28469812630118</td>
+<td align="left">0.998177557927623</td>
+<td align="left">0.997694762041861</td>
+<td align="left">0.996248700142084</td>
+<td align="left">0.999266979690157</td>
+<td align="left">0.284821661025775</td>
 </tr>
 </tbody>
 </table>
+<p>From this summary table you can see the Random Forest model has the highest overall accuracy with almost <strong>99.8177558%</strong> on the validation dataset. We will use this model for the assignment predictions on the test data.</p>
+</div>
 <div id="random-forest-confusion-matrix" class="section level4">
 <h4>Random Forest Confusion Matrix</h4>
-<p>This confusion matrix shows the results from predicting against the validation set.</p>
+<p>The confusion matrix below shows the results from predicting against the validation set for the Random Forest model. Both the Sensitivity and Specificity are very near 1 for all classe types, showing this to be a good overall model for prediction.</p>
 <pre class="r"><code>confusionMatrix(pred, validation$classe)</code></pre>
 <pre><code>## Confusion Matrix and Statistics
 ## 
 ##           Reference
 ## Prediction    A    B    C    D    E
-##          A 4902  109    0    4    0
-##          B   12 3108   99    5   41
-##          C    0  118 2864  106   24
-##          D    9    8   53 2687   18
-##          E    0    3    0   30 3092
+##          A 1093    0    0    0    0
+##          B    0  742    0    0    0
+##          C    0    1  670    2    0
+##          D    0    0    0  627    3
+##          E    1    0    0    0  702
 ## 
 ## Overall Statistics
 ##                                           
-##                Accuracy : 0.963           
-##                  95% CI : (0.9601, 0.9658)
-##     No Information Rate : 0.2847          
+##                Accuracy : 0.9982          
+##                  95% CI : (0.9962, 0.9993)
+##     No Information Rate : 0.2848          
 ##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
 ##                                           
-##                   Kappa : 0.9532          
+##                   Kappa : 0.9977          
 ##  Mcnemar's Test P-Value : NA              
 ## 
 ## Statistics by Class:
 ## 
 ##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9957   0.9289   0.9496   0.9488   0.9739
-## Specificity            0.9909   0.9887   0.9826   0.9939   0.9977
-## Pos Pred Value         0.9775   0.9519   0.9203   0.9683   0.9894
-## Neg Pred Value         0.9983   0.9830   0.9893   0.9900   0.9941
-## Prevalence             0.2847   0.1935   0.1744   0.1638   0.1836
-## Detection Rate         0.2835   0.1797   0.1656   0.1554   0.1788
-## Detection Prevalence   0.2900   0.1888   0.1800   0.1605   0.1807
-## Balanced Accuracy      0.9933   0.9588   0.9661   0.9714   0.9858</code></pre>
+## Sensitivity            0.9991   0.9987   1.0000   0.9968   0.9957
+## Specificity            1.0000   1.0000   0.9991   0.9991   0.9997
+## Pos Pred Value         1.0000   1.0000   0.9955   0.9952   0.9986
+## Neg Pred Value         0.9996   0.9997   1.0000   0.9994   0.9990
+## Prevalence             0.2848   0.1934   0.1744   0.1638   0.1835
+## Detection Rate         0.2846   0.1932   0.1744   0.1632   0.1828
+## Detection Prevalence   0.2846   0.1932   0.1752   0.1640   0.1830
+## Balanced Accuracy      0.9995   0.9993   0.9995   0.9979   0.9977</code></pre>
 </div>
 <div id="expected-out-of-sample-error" class="section level4">
 <h4>Expected out of sample error</h4>
-<p>Out of sample error rate is the error rate you get from a using your model on a new dataset. We want to avoid the model overfitting our data by creating a model built on noise in our training dataset. The final model should be a good representation of the signals in the dataset. The Random Forest model has and Accuracy of almost <strong>96.3046495%</strong> on the Validation set with an Out-Of-Sample error of approximately <strong>3.6953505%</strong>.</p>
+<p>Out of sample error rate is the error rate you get from a using your model on a new dataset. We want to avoid the model overfitting our data by creating a model built on noise in our training dataset. The final model should be a good representation of the signals in the dataset. The Random Forest model has and Accuracy of almost <strong>99.8177558%</strong> on the Validation set with an Out-Of-Sample error of approximately <strong>0.1822442%</strong> which is well within the 95% confidence interval.</p>
 </div>
-</div>
-<div id="conclusion" class="section level3">
-<h3>Conclusion</h3>
 </div>
 
 

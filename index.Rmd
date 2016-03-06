@@ -16,17 +16,12 @@ Class C | Lifting the dumbbell only halfway
 Class D | Lowering the dumbbell only halfway
 Class E | Throwing the hips to the front
 
-Full details from the study can be found from <http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises>.  The full paper can be found [here](http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201)
+Full details from the study can be found from <http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises>.  The full paper can be found [here](http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201).  The study training data has been sourced from <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>. The testing data can also be found [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv).
 
 ### Objective
 Choice a Machine Learning algorithm to most accurately predict the five different exercise variation types.  The final model will be used to predit 20 test cases available in the test dataset.
 
-###Exploritory Analysis
-
-<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
-
-<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
-
+###Exploritory Data Analysis
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
 library(doParallel)
 library(caret)
@@ -34,22 +29,24 @@ library(knitr)
 
 registerDoParallel(cores=6)
 ```
-
+Firstly load in the training dataset.
 ```{r, cache=TRUE}
 pmlData <- read.csv("pml-training.csv", stringsAsFactors = FALSE, na.strings = c("NA","#DIV/0!",""))
 ```
-
+Reviewing the training dataset we find it contains `r dim(pmlData)[1]` rows and `r dim(pmlData)[2]` columns.  To produce as simple model as possible we need to remove any variables that have little predictive power and will not adversly affect the final prediction.  Within the dataset there are many columns containing very little data with the majority of values being NA.  The NA columns only contain values when the "new_window" variable is set to "yes".  Let's review the proportions of this value to determine if it can be removed from the traning data.
 ```{r, echo=FALSE}
-print("Dimensions")
-dim(pmlData)
 tabCount  <- table( pmlData$new_window)
 print("new_window Factor count")
 tabCount
 print("new_window Factor percentage")
 prop.table(tabCount)
 ```
+As the "yes" value only represents `r (prop.table(tabCount)[2])*10`% of the overall dataset, we can assume it will have little impact on the results if removed.  After removing these rows, a nearZeroVar analysis shows we can further reduce the number of columns by removing the Near Zero Value columns, reducing the overall columns down to 59.
 
-###Preparing the data
+Further, we can also remove any time values, as the analysis we are conducting has no time dependancies.  The "X" index is also not required and the "user_name" should be removed, so as not to overfit the model on specific users.  A model produced without usernames will be able to be applied to wider test data sets.  This beings our overall columns to 54 which includes our predictor "classe" which we can convert to a factor.
+
+####Preparing the data
+Clean dataset as per the analysis conducted above.
 ```{r, cache=TRUE}
 pmlNo <- pmlData[pmlData$new_window == "no",]
 pmlClean <- nearZeroVar(pmlNo, saveMetrics = TRUE)
@@ -62,8 +59,9 @@ pmlData$classe <- factor(pmlData$classe)
 
 
 ####Assumptions and limitations
-Could not preform PCA due to R error
+Further revision of the remaining columns shows some strong correlation between some predictors.  These should be removed or transformed to a simpler composite variable using Principle Component Analysis.  However, due to the number of variable combinations listed below this was too time consuming to process by hand.  Also I received errors from R when trying to PreProcess the new dataset using the PCA method.  Therefore I left all 54 variables in my training dataset.
 
+**Highly correlated variables**
 ```{r}
 M <- abs(cor(pmlData[,-54]))
 diag(M) <- 0
@@ -71,8 +69,9 @@ which(M > 0.9, arr.ind=T)
 ```
 
 ####Cross Validation
+Because of the large training dataset, cross validation, although not necessary, would aid in addressing potential overfitting of our chosen model.  I now break the training dataset into a training and validation set.
 ```{r, cache=TRUE}
-inTrain <- createDataPartition(y=pmlData$classe, p=0.1, list=FALSE)
+inTrain <- createDataPartition(y=pmlData$classe, p=0.8, list=FALSE)
 training <- pmlData[inTrain,]
 validation <- pmlData[-inTrain,]
 rm(inTrain)
@@ -80,7 +79,8 @@ rm(pmlData)
 ```
 
 ###Model Build
-To obtain the best 
+To obtain the best model for predicting the weight lifting exercise dataset, I will compare the accuracy of three different model types, Trees, Boosting and Random Forests.  The model with the best results will be used for the final test prediction.  A summary of the each model accuracy over the training and validation datasets is presented below the model build.
+
 ####Prediction using Trees
 ```{r, cache=TRUE, warning=FALSE, message=FALSE, error=FALSE}
 set.seed(32343)
@@ -135,13 +135,12 @@ results <- rbind( results, c("rf Val", confrf))
 kable(results[1:6])
 ```
 
+From this summary table you can see the Random Forest model has the highest overall accuracy with almost **`r confrf[1]*100`%** on the validation dataset.  We will use this model for the assignment predictions on the test data.
+
 ####Random Forest Confusion Matrix
-This confusion matrix shows the results from predicting against the validation set.
-```{r}
+The confusion matrix below shows the results from predicting against the validation set for the Random Forest model.  Both the Sensitivity and Specificity are very near 1 for all classe types, showing this to be a good overall model for prediction.
+```{r, cache=TRUE}
 confusionMatrix(pred, validation$classe)
 ```
 ####Expected out of sample error 
-Out of sample error rate is the error rate you get from a using your model on a new dataset.  We want to avoid the model overfitting our data by creating a model built on noise in our training dataset.  The final model should be a good representation of the signals in the dataset. The Random Forest model has and Accuracy of almost **`r confrf[1]*100`%** on the Validation set with an Out-Of-Sample error of approximately **`r (1-confrf[1])*100`%**.
-
-###Conclusion
-
+Out of sample error rate is the error rate you get from a using your model on a new dataset.  We want to avoid the model overfitting our data by creating a model built on noise in our training dataset.  The final model should be a good representation of the signals in the dataset. The Random Forest model has and Accuracy of almost **`r confrf[1]*100`%** on the Validation set with an Out-Of-Sample error of approximately **`r (1-confrf[1])*100`%** which is well within the 95% confidence interval.
