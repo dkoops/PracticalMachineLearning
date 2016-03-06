@@ -1,0 +1,147 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "David Koops"
+date: "6 March 2016"
+output: html_document
+---
+
+###Background
+Personal activity data has been collected from six participants in a qualitative activity recognition study. Using data from accelerometers on the belt, forearm, arm, and dumbells, participants were asked to perform barbell lifts correctly and incorrectly in five different ways. The resulting data has been analysed to determine if Machine Learning algorithms can accurately predict which variation of an exercise a person is performing.  The study recorded the following five exercise variations.
+
+Exercise Variation  | Description
+--------|----------------------------------------
+Class A | Exactly according to the specification
+Class B | Throwing the elbows to the front 
+Class C | Lifting the dumbbell only halfway 
+Class D | Lowering the dumbbell only halfway
+Class E | Throwing the hips to the front
+
+Full details from the study can be found from <http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises>.  The full paper can be found [here](http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201)
+
+### Objective
+Choice a Machine Learning algorithm to most accurately predict the five different exercise variation types.  The final model will be used to predit 20 test cases available in the test dataset.
+
+###Exploritory Analysis
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+library(doParallel)
+library(caret)
+library(knitr)
+
+registerDoParallel(cores=6)
+```
+
+```{r, cache=TRUE}
+pmlData <- read.csv("pml-training.csv", stringsAsFactors = FALSE, na.strings = c("NA","#DIV/0!",""))
+```
+
+```{r, echo=FALSE}
+print("Dimensions")
+dim(pmlData)
+tabCount  <- table( pmlData$new_window)
+print("new_window Factor count")
+tabCount
+print("new_window Factor percentage")
+prop.table(tabCount)
+```
+
+###Preparing the data
+```{r, cache=TRUE}
+pmlNo <- pmlData[pmlData$new_window == "no",]
+pmlClean <- nearZeroVar(pmlNo, saveMetrics = TRUE)
+rnames <- row.names(pmlClean[pmlClean$nzv == FALSE,])
+pmlData <- pmlNo[,rnames]
+rm(pmlNo)
+pmlData <- pmlData[, -(1:5)]
+pmlData$classe <- factor(pmlData$classe)
+```
+
+
+####Assumptions and limitations
+Could not preform PCA due to R error
+
+```{r}
+M <- abs(cor(pmlData[,-54]))
+diag(M) <- 0
+which(M > 0.9, arr.ind=T)
+```
+
+####Cross Validation
+```{r, cache=TRUE}
+inTrain <- createDataPartition(y=pmlData$classe, p=0.1, list=FALSE)
+training <- pmlData[inTrain,]
+validation <- pmlData[-inTrain,]
+rm(inTrain)
+rm(pmlData)
+```
+
+###Model Build
+To obtain the best 
+####Prediction using Trees
+```{r, cache=TRUE, warning=FALSE, message=FALSE, error=FALSE}
+set.seed(32343)
+modFit <- train(classe ~ .,method="rpart",data=training)
+
+# Make Model Summary Table
+pred <- predict(modFit,newdata=training)
+confRpart <- confusionMatrix(pred, training$classe)$overall
+results <- data.frame()
+results <- cbind( "rpart Train", rbind(results, confRpart))
+names(results) <- c("ModelType", names(confRpart))
+results[,1] <- as.character(results[,1])
+
+# Adding to Summary results
+pred <- predict(modFit,newdata=validation)
+confRpart <- confusionMatrix(pred, validation$classe)$overall
+results <- rbind( results, c("rpart Val", confRpart))
+```
+
+####Prediction using Boosting
+```{r, cache=TRUE, warning=FALSE, message=FALSE, error=FALSE}
+set.seed(12345)
+modelFit <- train(classe ~ ., method="gbm",data=training,verbose=FALSE)
+pred <- predict(modelFit, training)
+
+# Adding to Summary results
+confboost <- confusionMatrix(pred, training$classe)$overall
+results <- rbind( results, c("boost Train", confboost))
+
+pred <- predict(modelFit, validation)
+confboost <- confusionMatrix(pred, validation$classe)$overall
+results <- rbind( results, c("boost Val", confboost))
+```
+
+####Prediction using Random Forests
+```{r, cache=TRUE, warning=FALSE, message=FALSE, error=FALSE}
+set.seed(12345)
+modelFit <- train(classe ~.,data=training, method="rf",trControl = trainControl(method="cv"))
+pred <- predict(modelFit, training)
+
+# Adding to Summary results
+confrf <- confusionMatrix(pred, training$classe)$overall
+results <- rbind( results, c("rf Train", confrf))
+
+pred <- predict(modelFit, validation)
+confrf <- confusionMatrix(pred, validation$classe)$overall
+results <- rbind( results, c("rf Val", confrf))
+```
+
+**Summary Accuracy table**
+```{r, cache=TRUE, warning=FALSE, message=FALSE, error=FALSE}
+kable(results[1:6])
+```
+
+####Random Forest Confusion Matrix
+This confusion matrix shows the results from predicting against the validation set.
+```{r}
+confusionMatrix(pred, validation$classe)
+```
+####Expected out of sample error 
+Out of sample error rate is the error rate you get from a using your model on a new dataset.  We want to avoid the model overfitting our data by creating a model built on noise in our training dataset.  The final model should be a good representation of the signals in the dataset. The Random Forest model has and Accuracy of almost **`r confrf[1]*100`%** on the Validation set with an Out-Of-Sample error of approximately **`r (1-confrf[1])*100`%**.
+
+###Conclusion
+
